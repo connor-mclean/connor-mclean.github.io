@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Arena Allocator</title>
+    </head>
+    <body>
+        <a href="index.html">Home</a>
+        <h1>Arena allocator</h1>
+        Arena allocator based on gingerBill's <a href="https://www.gingerbill.org/article/2019/02/08/memory-allocation-strategies-002/">implementation</a>
+        as a single-header library à la <a href="https://github.com/nothings/stb/blob/master/docs/stb_howto.txt">stb</a>.
+        <p>
+        <a href="src/arena.h">source</a>
+        <h2>Usage</h2>
+        <pre>
+        #define ARENA_IMPLEMENTATION
+        #include "arena.h"
+
+        arena a = {0};
+        unsigned char mem[1024];
+        arena_init(&amp;a, mem, 1024);
+
+        {
+            char *s = arena_asprintf(&amp;a, "%s, %s!", "Hello", "World");
+            puts(s); // Prints "Hello, World!"
+        }
+
+        arena_deinit(&amp;a);
+        </pre>
+    </body>
+</html>
