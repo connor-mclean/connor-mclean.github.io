@@ -208,8 +208,11 @@ void arena_init(arena *a, void *mem, const size_t cap) {
 }
 
 void arena_deinit(arena *a) {
-	arena_reset(a);
+	memset(a->mem, 0, a->curr_offset);
 	a->mem = NULL;
+	a->curr_offset = 0;
+	a->prev_offset = 0;
+	a->cap = 0;
 }
 
 void *arena_alloc(arena *a, const size_t size) {
