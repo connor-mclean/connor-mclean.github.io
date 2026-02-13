@@ -99,7 +99,6 @@ static void *arena_aligned_realloc(arena *a, const size_t alignment, void *old_m
 			return new_mem;
 		}
 	} else {
-		/* assert(0 && "requested memory is outside the bounds of the arena"); */
 		errno = ENOMEM;
 		return NULL;
 	}
