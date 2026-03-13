@@ -1,11 +1,9 @@
 #ifndef SB_H
 #define SB_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #ifndef SB_DEFAULT_CAP
 #define SB_DEFAULT_CAP 32
@@ -99,7 +97,20 @@ bool sb_grow(string_builder *sb, size_t size);
  */
 char *sb_to_string(const string_builder *sb);
 
+/**
+ * Returns the capacity of the string builder.
+ */
+#define sb_cap(sb) ((sb) ? (sb)->cap : 0)
+
+/**
+ * Returns the length of the string builder.
+ */
+#define sb_len(sb) ((sb) ? (sb)->len : 0)
+
 #ifdef SB_IMPLEMENTATION
+
+#include <stdio.h>
+#include <string.h>
 
 void sb_init(string_builder *sb) {
 	sb_init_cap(sb, SB_DEFAULT_CAP);
@@ -114,9 +125,7 @@ void sb_init_cap(string_builder *sb, size_t cap) {
 
 void sb_init_from(string_builder *sb, const char *s) {
 	size_t len = strlen(s);
-	sb->cap = len * 2;
-	sb->buf = malloc(sb->cap);
-	memset(sb->buf, 0, sb->cap);
+	sb_init_cap(sb, len*2);
 	sb_write(sb, s);
 }
 
@@ -147,8 +156,9 @@ size_t sb_vwritef(string_builder *sb, const char *format, va_list args) {
 		va_end(args);
 		return 0;
 	}
-	if (sb->len + len + 1 >= sb->cap) {
-		if (!sb_grow(sb, len*2)) { return 0; }
+	size_t min_cap = sb->len+len+1;
+	if (min_cap >= sb->cap) {
+		if (!sb_grow(sb, min_cap)) { return 0; }
 	}
 	char *dst = sb->buf;
 	const int written = vsnprintf(dst + sb->len, len+1, format, args);
@@ -164,14 +174,13 @@ void sb_clear(string_builder *sb) {
 }
 
 bool sb_grow(string_builder *sb, const size_t size) {
-	size_t cap = sb->cap + size;
-	if (size < sb->cap) { return false; }
-	char *buf;
-	buf = realloc(sb->buf, cap);
+	size_t new_cap = size;
+	if (new_cap < sb->cap) { return false; }
+	char *buf = realloc(sb->buf, new_cap);
 	if (buf == NULL) { return false; }
-	memset(buf + sb->len, 0, cap - sb->len);
+	memset(buf + sb->len, 0, new_cap - sb->len);
 	sb->buf = buf;
-	sb->cap = cap;
+	sb->cap = new_cap;
 	return true;
 }
 
