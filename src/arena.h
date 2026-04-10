@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdarg.h>
 
 #ifndef ARENA_DEFAULT_ALIGNMENT
 #define ARENA_DEFAULT_ALIGNMENT (2*sizeof(void *))
@@ -24,25 +25,25 @@ static inline bool pow_2(const uintptr_t v) { return (v&(v-1)) == 0; }
  * @return The address of the next aligned value.
  */
 static uintptr_t align_forward(const uintptr_t ptr, const size_t alignment) {
-	assert(pow_2(alignment));
-	uintptr_t p = ptr;
-	const uintptr_t a = (uintptr_t) alignment;
-	const uintptr_t mod = p & (a - 1); /* faster than (p % a) because `a` is a power of two */
-	if (mod != 0) {
-		p += a - mod;
-	}
-	return p;
+    assert(pow_2(alignment));
+    uintptr_t p = ptr;
+    const uintptr_t a = (uintptr_t)alignment;
+    const uintptr_t mod = p & (a - 1); /* faster than (p % a) because `a` is a power of two */
+    if (mod != 0) {
+        p += a - mod;
+    }
+    return p;
 }
 
 /**
  * Memory arena struct.
  */
 typedef struct arena {
-	unsigned char *mem; // The memory in the arena.
+    unsigned char *mem; // The memory in the arena.
 
-	size_t cap;         // The capacity of the memory arena.
-	size_t curr_offset; // The current offset within the arena.
-	size_t prev_offset; // The previous offset in the arena.
+    size_t cap;         // The capacity of the memory arena.
+    size_t curr_offset; // The current offset within the arena.
+    size_t prev_offset; // The previous offset in the arena.
 } arena;
 
 /**
@@ -55,18 +56,18 @@ typedef struct arena {
  *         sets errno and returns NULL.
  */
 static void *arena_aligned_alloc(arena *a, const size_t alignment, size_t size) {
-	const uintptr_t curr = (uintptr_t)a->mem + (uintptr_t)a->curr_offset;
-	uintptr_t offset = align_forward(curr, alignment);
-	offset -= (uintptr_t)a->mem;
-	if (offset+size <= a->cap) {
-		void *ptr = &a->mem[offset];
-		a->prev_offset = offset;
-		a->curr_offset = offset + size;
-		memset(ptr, 0, size);
-		return ptr;
-	}
+    const uintptr_t curr = (uintptr_t)a->mem + (uintptr_t)a->curr_offset;
+    uintptr_t offset = align_forward(curr, alignment);
+    offset -= (uintptr_t)a->mem;
+    if (offset+size <= a->cap) {
+        void *ptr = &a->mem[offset];
+        a->prev_offset = offset;
+        a->curr_offset = offset + size;
+        memset(ptr, 0, size);
+        return ptr;
+    }
 	errno = ENOMEM;
-	return NULL;
+    return NULL;
 }
 
 /**
@@ -119,7 +120,7 @@ void arena_init(arena *a, void *mem, size_t cap);
 void arena_deinit(arena *a);
 
 /**
- * Allocates memory from the arena with the alignment defined by `DEFAULT_ALIGNMENT`.
+ * Allocates memory from the arena.
  * @param a    Arena pointer.
  * @param size The number of bytes to allocate from the arena.
  * @return Returns a pointer to the allocated space on success; if the
@@ -129,7 +130,18 @@ void arena_deinit(arena *a);
 void *arena_alloc(arena *a, size_t size);
 
 /**
- * Reallocates the arena memory with the alignment defined by `DEFAULT_ALIGNMENT`.
+ * Allocates memory from the arena for count objects of size length.
+ * @param a     Arena pointer.
+ * @param count The number of objects.
+ * @param size  The number of bytes to allocate from the arena.
+ * @return Returns a pointer to the allocated space on success; if the
+ *         additional size requested meets or exceeds the size of the arena,
+ *         returns `NULL`.
+ */
+void *arena_calloc(arena *a, size_t count, size_t size);
+
+/**
+ * Reallocates the arena memory.
  * @param a          Arena pointer.
  * @param old_memory Pointer to the old memory.
  * @param old_size   The old memory size.
@@ -182,6 +194,8 @@ char *arena_strndup(arena *a, const char *src, size_t size);
  */
 char *arena_asprintf(arena *a, const char *fmt, ...);
 
+char *arena_vasprintf(arena *a, const char *fmt, va_list args);
+
 /**
  * Resets the arena.
  * @param a Arena pointer.
@@ -194,28 +208,37 @@ void arena_reset(arena *a);
  */
 void arena_zero(arena *a);
 
+typedef struct temp_arena {
+	arena *a;
+	size_t prev_offset;
+	size_t curr_offset;
+} temp_arena;
+
+temp_arena temp_arena_begin(arena *a);
+void temp_arena_end(temp_arena temp);
+
 #ifdef ARENA_IMPLEMENTATION
 
 #include <stdio.h>
-#include <stdarg.h>
 
 void arena_init(arena *a, void *mem, const size_t cap) {
-	a->mem = (unsigned char *)mem;
-	a->cap = cap;
-	a->curr_offset = 0;
-	a->prev_offset = 0;
+    a->mem = (unsigned char *)mem;
+    a->cap = cap;
+    a->curr_offset = 0;
+    a->prev_offset = 0;
 }
 
 void arena_deinit(arena *a) {
-	memset(a->mem, 0, a->curr_offset);
-	a->mem = NULL;
-	a->curr_offset = 0;
-	a->prev_offset = 0;
-	a->cap = 0;
+    arena_reset(a);
+    a->mem = NULL;
 }
 
 void *arena_alloc(arena *a, const size_t size) {
-	return arena_aligned_alloc(a, ARENA_DEFAULT_ALIGNMENT, size);
+    return arena_aligned_alloc(a, ARENA_DEFAULT_ALIGNMENT, size);
+}
+
+void *arena_calloc(arena *a, size_t count, size_t size) {
+	return arena_alloc(a, count*size);
 }
 
 void *arena_realloc(arena *a, void *old_memory, const size_t old_size, const size_t new_size) {
@@ -223,62 +246,81 @@ void *arena_realloc(arena *a, void *old_memory, const size_t old_size, const siz
 }
 
 void *arena_memdup(arena *a, const void *src, size_t size) {
-	void *dup = arena_alloc(a, size);
-	if (dup != NULL) {
+    void *dup = arena_alloc(a, size);
+    if (dup != NULL) {
 		memcpy(dup, src, size);
-	}
-	return dup;
+    }
+    return dup;
 }
 
 char *arena_strdup(arena *a, const char *src) {
-	size_t len = strlen(src)+1;
-	char *dup = arena_alloc(a, len);
-	if (dup != NULL) {
+    size_t len = strlen(src)+1;
+    char *dup = arena_alloc(a, len);
+    if (dup != NULL) {
 		memcpy(dup, src, len);
 		dup[len] = '\0';
-	}
-	return dup;
+    }
+    return dup;
 }
 
 char *arena_strndup(arena *a, const char *src, const size_t size) {
-	size_t len = strnlen(src, size);
-	char *dup = arena_alloc(a, len+1);
-	if (dup != NULL) {
+    size_t len = strnlen(src, size);
+    char *dup = arena_alloc(a, len+1);
+    if (dup != NULL) {
 		memcpy(dup, src, len);
 		dup[len] = '\0';
-	}
-	return dup;
+    }
+    return dup;
 }
 
 char *arena_asprintf(arena *a, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	va_list args_copy;
-	va_copy(args_copy, args);
-	int len = vsnprintf(NULL, 0, fmt, args_copy);
-	va_end(args_copy);
-	if (len < 0) {
-		va_end(args);
-		return NULL;
-	}
-	char *out = arena_alloc(a, len+1);
-	if (out == NULL) {
-		va_end(args);
-		return NULL;
-	}
-	vsnprintf(out, len+1, fmt, args);
+	char *out = arena_vasprintf(a, fmt, args);
 	va_end(args);
 	return out;
 }
 
+char *arena_vasprintf(arena *a, const char *fmt, va_list args) {
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int len = vsnprintf(NULL, 0, fmt, args_copy);
+    va_end(args_copy);
+    if (len < 0) {
+        va_end(args);
+        return NULL;
+    }
+    char *out = arena_alloc(a, len+1);
+    if (out == NULL) {
+        va_end(args);
+        return NULL;
+    }
+    vsnprintf(out, len+1, fmt, args);
+    return out;
+}
+
 void arena_reset(arena *a) {
-	a->curr_offset = 0;
-	a->prev_offset = 0;
+    a->curr_offset = 0;
+    a->prev_offset = 0;
 }
 
 void arena_zero(arena *a) {
-	memset(a->mem, 0, a->curr_offset);
-	arena_reset(a);
+    memset(a->mem, 0, a->curr_offset);
+    arena_reset(a);
+}
+
+temp_arena temp_arena_begin(arena *a) {
+	temp_arena temp = (temp_arena){
+		.a = a,
+		.prev_offset = a->prev_offset,
+		.curr_offset = a->curr_offset,
+	};
+	return temp;
+}
+
+void temp_arena_end(temp_arena temp) {
+	temp.a->prev_offset = temp.prev_offset;
+	temp.a->curr_offset = temp.curr_offset;
 }
 
 #endif /* ARENA_IMPLEMENTATION */
