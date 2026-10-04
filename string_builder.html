@@ -10,26 +10,26 @@
         String builder similar to <a href="https://pkg.go.dev/strings#Builder">Go's</a>
         implemented as a single-header library à la <a href="https://github.com/nothings/stb/blob/master/docs/stb_howto.txt">stb</a>.
         <p>
-        <a href="src/sb.h">source</a>
+        <a href="src/string_builder.h">source</a>
         <h2>Usage</h2>
         <pre>
-        #define SB_IMPLEMENTATION
-        #include "sb.h"
+        #define STRING_BUILDER_IMPLEMENTATION
+        #include "string_builder.h"
 
-        string_builder sb = {0};
-        sb_init(&amp;sb);
+        string_builder_t sb = {0};
+        string_builder_init(&amp;sb);
 
-        sb_write(&amp;sb, "Hello, ");
-        sb_writef(&amp;sb, "%s%c", "World", '!');
+        string_builder_write(&amp;sb, "Hello, ");
+        string_builder_writef(&amp;sb, "%s%c", "World", '!');
 
         puts(sb.buf); // Prints "Hello, World!"
 
         // The buffer can also be returned as an allocated string:
-        char *s = sb_to_string(&amp;sb);
+        char *s = string_builder_to_string(&amp;sb);
         puts(s);
         free(s); // The caller is responsible for freeing it.
 
-        sb_deinit(&amp;sb);
+        string_builder_deinit(&amp;sb);
         </pre>
     </body>
 </html>

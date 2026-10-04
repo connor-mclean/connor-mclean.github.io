@@ -16,16 +16,17 @@
         #define ARENA_IMPLEMENTATION
         #include "arena.h"
 
-        arena a = {0};
-        unsigned char mem[1024];
-        arena_init(&amp;a, mem, 1024);
+        arena_t arena = {0};
+        #define ARENA_SIZE 1024
+        unsigned char mem[ARENA_SIZE];
+        arena_init(&amp;arena, mem, ARENA_SIZE);
 
         {
-            char *s = arena_asprintf(&amp;a, "%s, %s!", "Hello", "World");
+            char *s = arena_sprintf(&amp;arena, "%s, %s!", "Hello", "World");
             puts(s); // Prints "Hello, World!"
         }
 
-        arena_deinit(&amp;a);
+        arena_deinit(&amp;arena);
         </pre>
     </body>
 </html>
